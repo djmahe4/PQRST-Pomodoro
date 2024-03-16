@@ -1,8 +1,12 @@
 import google.generativeai as genai
 import time
 from pylatexenc.latex2text import LatexNodes2Text
+import os
 
-genai.configure(api_key="AIzaSyDdDpX2sFbSHzkxeyUCOER4Fjccuh-9JwI")
+api_key = os.getenv('GENERATIVE_AI_KEY')
+if api_key is None:
+    os.environ['GENERATIVE_AI_KEY'] = input("Enter gen-ai api key:")
+genai.configure(api_key=api_key)
 import tkinter as tk
 import random
 from tkinter import messagebox, font
