@@ -5,6 +5,8 @@ import time
 import threading
 import random
 import google.generativeai as genai
+from time import sleep
+import re
 from dotenv import load_dotenv, find_dotenv
 
 # Find or create .env file
@@ -70,21 +72,74 @@ def gemini_ai_query(query):
     response = chat_session.send_message(query)
     return response.text
 
-def generate_questions(topic):
-    # This function will generate a list of MCQ questions based on the topic using Gemini AI
+def generate_questions(query,chat_session):
+    # This function will communicate with Gemini AI to get the output
     # Replace with actual Gemini AI API calls
-    return [
-        {
-            "question": f"What is a key concept in {topic}?",
-            "options": ["A key concept is...", "Option 2", "Option 3", "Option 4"],
-            "correct_answer": "A key concept is..."
-        },
-        {
-            "question": f"Explain the importance of {topic} in context.",
-            "options": ["The importance is...", "Option 2", "Option 3", "Option 4"],
-            "correct_answer": "The importance is..."
-        }
-    ]
+    try:
+        while True:
+            response = chat_session.send_message(query)
+            # Extract the question and answer from the generated text
+            question_answer = response.text.replace("*","").replace("**","")
+
+            # Define a pattern to extract the question, options, and answer
+            #pattern = r"\d+\.(.*?)\n\((a)\)(.*?)\n\((b)\)(.*?)\n\((c)\)(.*?)\n\((d)\)(.*?)\n\n\*\*AnswerKey:\*\*\n(\d+)\.\((.)\)"
+
+            # Find all matches in the input text
+            #matches = re.findall(pattern, question_answer, re.DOTALL)
+            matches=question_answer.split("\n")
+
+            # Create a list of dictionaries, each containing question, options, and answer
+            questions_list = []
+
+            diction={
+                'question':"",
+                'options':['','','','']
+            }
+            questions_list.append(diction)
+            for match in matches:
+                if match==" " or match=="" or "answer" in match.lower():
+                    continue
+                #if type(match[0])==int:
+                try:
+                    if int(match[0]) and len(match)>10:
+                        diction["question"]=match[3:]
+                        print(match[3:])
+                except ValueError:
+                    pass
+                if match[1]=='a':
+                    diction['options'][0]=match
+                if match[1]=='b':
+                    diction['options'][1]=match
+                if match[1]=='c':
+                    diction['options'][2]=match
+                if match[1]=='d':
+                    diction['options'][3] = match
+                    diction = {
+                        'question': "",
+                        'options': ['','','','']
+                    }
+                    questions_list.append(diction)
+                qmatch = re.match(r"(\d+)\.\s*\((\w)\)", match)
+                if qmatch:
+                    question_number, answer = qmatch.groups()
+                    question_number=int(question_number)
+                    print(f"Question {question_number}: Answer = {answer}")
+                    # options=questions_list[question_number]["options"]
+                    diction=questions_list[question_number-1]
+                    diction.update({"answer": answer})
+                    questions_list[question_number-1]=diction
+                #else:
+                    #diction["question"]+=match
+            break
+    except questions_list==[] or questions_list[0]['question']=='' or len(questions_list)>=3:
+        sleep(10)
+        print("retrying..")
+
+    # Print the list of dictionaries
+    print(questions_list)
+    #else:
+    #return response.text.replace("*","")
+    return questions_list
 
 class Timer:
     def __init__(self, duration, update_ui_callback, on_finish_callback):
@@ -144,7 +199,7 @@ class PQRSApp:
         topic = self.topic_entry.get()
         if topic:
             self.output_text.insert(tk.END, f"Starting PQRST method for topic: {topic}\n")
-            self.run_step("Preview", 5 * 60, f"Overview of {topic}", self.preview)
+            self.run_step("Preview", 5 * 60, f"Preview of {topic}", self.question)
 
     def run_step(self, step_name, duration, query, next_step_callback):
         self.output_text.insert(tk.END, f"{step_name}:\n")
@@ -172,7 +227,7 @@ class PQRSApp:
         self.run_step("Preview", 1 * 60, "Preview the topic", self.question)
 
     def question(self):
-        self.run_step("Question", 10 * 60, "Formulate questions about the topic", self.read)
+        self.run_step("Question", 10 * 60, "Formulate questions and answers about the topic for clear understanding of concepts", self.read)
 
     def read(self):
         self.run_step("Read", 25 * 60, "Reading material about the topic", self.summarize)
@@ -182,8 +237,8 @@ class PQRSApp:
 
     def test(self):
         topic = self.topic_entry.get()
-        self.questions = generate_questions(topic)
-        random.shuffle(self.questions)  # Shuffle the questions
+        self.questions = generate_questions(topic,chat_session)
+        #random.shuffle(self.questions)  # Shuffle the questions
         self.score = 0
         self.current_question_index = 0
         self.test_window = tk.Toplevel(self.root)
@@ -200,7 +255,7 @@ class PQRSApp:
         self.load_next_question()
 
     def load_next_question(self):
-        if self.current_question_index < len(self.questions):
+        if self.current_question_index < len(self.questions) or self.questions[self.current_question_index]["answer"]!="" or self.questions[self.current_question_index]["question"]!="":
             question_data = self.questions[self.current_question_index]
             question = question_data["question"]
             options = question_data["options"]
@@ -212,8 +267,11 @@ class PQRSApp:
             self.finish_test()
 
     def check_answer(self, selected_index):
-        correct_answer = self.questions[self.current_question_index]["options"][0]  # First option is correct
+        #correct_answer = self.questions[self.current_question_index]["options"][0]  # First option is correct
         user_answer = self.option_buttons[selected_index].cget("text")
+        correct_answer = self.questions[self.current_question_index]["answer"]
+        check = {'a': 0, 'b': 1, 'c': 2, 'd': 3}
+        ca = self.questions[self.current_question_index]["options"][check[correct_answer]]
         if user_answer == correct_answer:
             self.score += 1
         self.current_question_index += 1
