@@ -6,6 +6,7 @@ import threading
 import random
 import google.generativeai as genai
 from time import sleep
+import datetime
 import re
 from dotenv import load_dotenv, find_dotenv
 
@@ -66,6 +67,34 @@ model = genai.GenerativeModel(
 
 chat_session = model.start_chat(history=[])
 
+def append_pqrst_markdown(subject, section, content):
+  """
+  Appends a markdown section to a file for studying using the PQrst method.
+
+  Args:
+      subject (str): The subject of the study material.
+      section (str): The PQrst section (e.g., "P", "Q", "R", "S", "T").
+      content (str): The content for the specified section.
+  """
+  # Create timestamp for clarity
+  timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+  filename = f"{subject}.md"
+
+  # Construct markdown text with section heading
+  markdown_text = f"""
+
+## {subject} - {timestamp}
+
+**{section}:**
+
+{content}
+
+"""
+
+  # Open the file in append mode (a+) to create it if it doesn't exist
+  with open(filename, "a+") as file:
+    file.write(markdown_text)
+
 def gemini_ai_query(query):
     # This function will communicate with Gemini AI to get the output
     # Replace with actual Gemini AI API calls
@@ -75,6 +104,7 @@ def gemini_ai_query(query):
 def generate_questions(query,chat_session):
     # This function will communicate with Gemini AI to get the output
     # Replace with actual Gemini AI API calls
+    global question_answer
     try:
         while True:
             response = chat_session.send_message(query)
@@ -137,6 +167,7 @@ def generate_questions(query,chat_session):
 
     # Print the list of dictionaries
     print(questions_list)
+    append_pqrst_markdown(query,"Test",question_answer)
     #else:
     #return response.text.replace("*","")
     return questions_list
@@ -196,17 +227,24 @@ class PQRSApp:
         self.extend_button.pack()
 
     def start_pqrs(self):
+        #global topic
         topic = self.topic_entry.get()
+        self.topic= topic
         if topic:
             self.output_text.insert(tk.END, f"Starting PQRST method for topic: {topic}\n")
             self.run_step("Preview", 5 * 60, f"Preview of {topic}", self.question)
 
     def run_step(self, step_name, duration, query, next_step_callback):
         self.output_text.insert(tk.END, f"{step_name}:\n")
+        #try:
         ai_output = gemini_ai_query(query)
+        #except genai.types.StopCandidateException:
+            #sleep(5)
+            #ai_output = gemini_ai_query(query)
         self.output_text.insert(tk.END, str(ai_output) + "\n")
         self.timer = Timer(duration, self.update_timer_label, next_step_callback)
         self.timer.start()
+        append_pqrst_markdown(self.topic, step_name, ai_output)
         self.next_step_callback = next_step_callback
 
     def update_timer_label(self, time_left):
@@ -237,7 +275,7 @@ class PQRSApp:
 
     def test(self):
         topic = self.topic_entry.get()
-        self.questions = generate_questions(topic,chat_session)
+        self.questions = generate_questions(f"Formulate mcq quiz on {topic} with answers",chat_session)
         #random.shuffle(self.questions)  # Shuffle the questions
         self.score = 0
         self.current_question_index = 0
@@ -255,7 +293,10 @@ class PQRSApp:
         self.load_next_question()
 
     def load_next_question(self):
-        if self.current_question_index < len(self.questions) or self.questions[self.current_question_index]["answer"]!="" or self.questions[self.current_question_index]["question"]!="":
+        if self.questions[self.current_question_index]["question"]=="":
+            self.test_window.destroy()
+            self.test()
+        if self.current_question_index < len(self.questions) or self.questions[self.current_question_index]["answer"]!="" :
             question_data = self.questions[self.current_question_index]
             question = question_data["question"]
             options = question_data["options"]
