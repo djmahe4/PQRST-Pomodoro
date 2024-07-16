@@ -8,8 +8,13 @@ import google.generativeai as genai
 from time import sleep
 import datetime
 import re
+import random
 from dotenv import load_dotenv, find_dotenv
+from pylatexenc.latex2text import LatexNodes2Text
 
+#colours=['red','purple','blue','green']
+def latex_to_unicode(latex_str):
+    return LatexNodes2Text().latex_to_text(latex_str)
 # Find or create .env file
 env_path = find_dotenv()
 if env_path == "":
@@ -92,14 +97,15 @@ def append_pqrst_markdown(subject, section, content):
 """
 
   # Open the file in append mode (a+) to create it if it doesn't exist
-  with open(filename, "a+") as file:
+  with open(filename, "a+",encoding='utf-8') as file:
     file.write(markdown_text)
 
 def gemini_ai_query(query):
     # This function will communicate with Gemini AI to get the output
     # Replace with actual Gemini AI API calls
     response = chat_session.send_message(query)
-    return response.text
+    response=latex_to_unicode(response.text)
+    return response#.text
 
 def generate_questions(query,chat_session):
     # This function will communicate with Gemini AI to get the output
@@ -127,8 +133,13 @@ def generate_questions(query,chat_session):
             }
             questions_list.append(diction)
             for match in matches:
-                if match==" " or match=="" or "answer" in match.lower():
+                if match==" " or match=="" :#or "answer" in match.lower():
                     continue
+                if 'answer' in match.lower():
+                    match2 = re.search(r"\((.)\)", match)
+                    if match2:
+                        extracted_character = match.group(1)
+                        diction.update({"answer": extracted_character})
                 #if type(match[0])==int:
                 try:
                     if int(match[0]) and len(match)>10:
@@ -136,6 +147,8 @@ def generate_questions(query,chat_session):
                         print(match[3:])
                 except ValueError:
                     pass
+                if diction["question"]=="" and match.endswith("?"):
+                    diction["question"]=match
                 if match[1]=='a':
                     diction['options'][0]=match
                 if match[1]=='b':
@@ -171,6 +184,7 @@ def generate_questions(query,chat_session):
     #else:
     #return response.text.replace("*","")
     return questions_list
+
 
 class Timer:
     def __init__(self, duration, update_ui_callback, on_finish_callback):
@@ -235,13 +249,13 @@ class PQRSApp:
             self.run_step("Preview", 5 * 60, f"Preview of {topic}", self.question)
 
     def run_step(self, step_name, duration, query, next_step_callback):
-        self.output_text.insert(tk.END, f"{step_name}:\n")
+        self.output_text.insert(tk.END, f"{step_name}:\n") #fg=random.choice(colours))
         #try:
         ai_output = gemini_ai_query(query)
         #except genai.types.StopCandidateException:
             #sleep(5)
             #ai_output = gemini_ai_query(query)
-        self.output_text.insert(tk.END, str(ai_output) + "\n")
+        self.output_text.insert(tk.END, str(ai_output) + "\n\n"+ "-"*58+"\n\n")
         self.timer = Timer(duration, self.update_timer_label, next_step_callback)
         self.timer.start()
         append_pqrst_markdown(self.topic, step_name, ai_output)
@@ -265,7 +279,7 @@ class PQRSApp:
         self.run_step("Preview", 1 * 60, "Preview the topic", self.question)
 
     def question(self):
-        self.run_step("Question", 10 * 60, "Formulate questions and answers about the topic for clear understanding of concepts", self.read)
+        self.run_step("Questions", 10 * 60, "Formulate questions and answers about the topic for clear understanding of concepts", self.read)
 
     def read(self):
         self.run_step("Read", 25 * 60, "Reading material about the topic", self.summarize)
@@ -322,9 +336,11 @@ class PQRSApp:
     def finish_test(self):
         messagebox.showinfo("Test Completed", f"Your final score is: {self.score}")
         self.test_window.destroy()
+        self.finish()
 
     def finish(self):
-        self.output_text.insert(tk.END, "PQRS method completed. Good job!\n")
+        self.output_text.insert(tk.END, "PQRST method completed. Good job!\n")
+        root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
