@@ -315,7 +315,7 @@ class PQRSApp:
             question = question_data["question"]
             options = question_data["options"]
             self.question_label.config(text=question)
-            random.shuffle(options)  # Shuffle the options
+            #random.shuffle(options)  # Shuffle the options
             for i in range(4):
                 self.option_buttons[i].config(text=options[i])
         else:
